@@ -26,8 +26,8 @@ A small local launcher that shows tools and links as tiles, starts tools with a 
     { "name": "JLPT prep", "group": "Tools", "dir": "../jlpt-prep", "start": "./jlpt", "url": "http://localhost:4747" },
     { "name": "Family Meal Planner", "group": "Tools", "dir": "../family-meal-planner", "start": "npm run start", "url": "http://localhost:5173" },
     { "name": "NetAcad Progress Tracker", "group": "Tools", "dir": "../netacad-progress-tracker", "start": "npm run start", "url": "http://localhost:8765" },
-    { "name": "Lernatelier Liveview IM25b", "group": "Tools", "dir": "../lernatelier-dashboard/lernatelier-mgmt", "start": "uv run scripts.liveview IM25b", "url": "http://localhost:8765/settings" },
-    { "name": "Lernatelier Liveview IM25d", "group": "Tools", "dir": "../lernatelier-dashboard/lernatelier-mgmt", "start": "uv run scripts.liveview IM25d", "url": "http://localhost:8765/settings" }
+    { "name": "Lernatelier Liveview IM25b", "group": "Tools", "dir": "../lernatelier-dashboard/lernatelier-mgmt", "start": "uv run -m scripts.liveview IM25b", "url": "http://localhost:8765/settings" },
+    { "name": "Lernatelier Liveview IM25d", "group": "Tools", "dir": "../lernatelier-dashboard/lernatelier-mgmt", "start": "uv run -m scripts.liveview IM25d", "url": "http://localhost:8765/settings" }
   ],
   "links": [
     { "name": "Obsidian Schule", "group": "Start", "url": "obsidian://open?vault=bbb" },
@@ -53,7 +53,8 @@ A small local launcher that shows tools and links as tiles, starts tools with a 
   - Windows: `taskkill /T /F /PID …` (because `npm` → `node`).
   - Linux: own process group (`Setpgid`) and signal sent to the group.
 - **Logs:** stdout/stderr of each tool goes into a ring buffer, shown in the UI as a collapsible view per tile. Helps with "doesn't start".
-- **Quitting the launcher:** Asks whether running tools should be stopped as well.
+- **Quitting the launcher:** Asks whether running tools should be stopped as well (Quit button in the UI, or Ctrl+C in the console). Closing the console window cannot ask; it leaves tools running.
+- **Remembering tools across runs:** Running tools are recorded in `pult-state.json` next to `tools.json` (name, root PID, process start time, port; not synced). On startup and on every page load, the launcher adopts an entry if the tool is still in `tools.json` with the same port and the PID still belongs to the same process (start time matches). Adopted tools show as running and can be stopped from the UI; their earlier output is not available. Entries that don't match `tools.json` are kept and retried; only a dead process or a reused PID drops an entry. Remembered processes are never killed automatically.
 - **Groups:** Tiles grouped by `group`, order as in the file. Optional "Experiments" group for new things.
 - **Search:** Pressing `/` focuses a search field, Enter opens the first matching tile.
 - `tools.json` is re-read on every page load so new tools appear without a restart.
@@ -61,7 +62,7 @@ A small local launcher that shows tools and links as tiles, starts tools with a 
 ## Milestones
 1. Tiles and start of the JLPT tool.
 2. Node and Python tools (environment, port check, status).
-3. Stop button, logs, port conflict display.
+3. Stop button, logs, port conflict display, remembering tools across runs.
 
 ## Not in v1
 Snippet tool, mail/Teams sending, Mac build, autostart at login.
