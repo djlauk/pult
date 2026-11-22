@@ -36,7 +36,7 @@ func TestStartFailureShowsOutput(t *testing.T) {
 	cfg := &Config{baseDir: dir}
 	tool := Tool{Name: "fail", Dir: ".", Start: "node fail.js", URL: "http://127.0.0.1:47392"}
 
-	err := NewManager().EnsureRunning(cfg, tool)
+	err := NewManager("").EnsureRunning(cfg, tool)
 	if err == nil || !strings.Contains(err.Error(), "exit status 1") || !strings.Contains(err.Error(), "boom: missing config") {
 		t.Errorf("err = %v", err)
 	}

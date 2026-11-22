@@ -34,7 +34,7 @@ console.log('parent up'); c.on('exit', (code) => process.exit(code ?? 1));`
 
 func TestStopKillsTree(t *testing.T) {
 	cfg, tool := writeTreeTool(t, "47393")
-	m := NewManager()
+	m := NewManager("")
 	if err := m.EnsureRunning(cfg, tool); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestStopKillsTree(t *testing.T) {
 
 func TestPortOwnerConflict(t *testing.T) {
 	cfg, tool := writeTreeTool(t, "47394")
-	m := NewManager()
+	m := NewManager("")
 	if err := m.EnsureRunning(cfg, tool); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestPortOwnerWhileStarting(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "slow.js"), []byte(`setTimeout(() => {}, 60000);`), 0o644)
 	cfg := &Config{baseDir: dir}
 	slow := Tool{Name: "slow", Dir: ".", Start: "node slow.js", URL: "http://127.0.0.1:47395"}
-	m := NewManager()
+	m := NewManager("")
 	go m.EnsureRunning(cfg, slow)
 	t.Cleanup(func() { m.Stop(slow.Name) })
 

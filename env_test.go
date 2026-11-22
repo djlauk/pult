@@ -91,7 +91,7 @@ func TestStartNodeTool(t *testing.T) {
 		URL:   "http://127.0.0.1:47391/some/path",
 		Env:   map[string]string{"PULT_B": "from-json"},
 	}
-	m := NewManager()
+	m := NewManager("")
 	if err := m.EnsureRunning(cfg, tool); err != nil {
 		t.Fatal(err)
 	}

@@ -36,6 +36,8 @@ type tileDTO struct {
 	PortBusy string `json:"port_busy,omitempty"`
 	// BusyBy names the pult tool holding the port; empty for a foreign process.
 	BusyBy string `json:"busy_by,omitempty"`
+	// Adopted is true for a tool started by an earlier pult run.
+	Adopted bool `json:"adopted,omitempty"`
 }
 
 type groupDTO struct {
@@ -56,11 +58,8 @@ func main() {
 		}
 		*configPath = filepath.Join(filepath.Dir(exe), "tools.json")
 	}
-	if _, err := LoadConfig(*configPath); err != nil {
-		log.Printf("warning: %v", err)
-	}
-
-	s := &server{configPath: *configPath, procs: NewManager()}
+	statePath := filepath.Join(filepath.Dir(*configPath), "pult-state.json")
+	s := &server{configPath: *configPath, procs: NewManager(statePath)}
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		log.Fatal(err)
@@ -78,6 +77,13 @@ func main() {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
+	}
+	// Adopt only after binding, so a second pult instance exits before it
+	// touches the state file.
+	if cfg, err := LoadConfig(*configPath); err != nil {
+		log.Printf("warning: %v", err)
+	} else {
+		s.procs.Adopt(cfg)
 	}
 	uiURL := "http://" + addr + "/"
 	log.Printf("pult listening on %s (config: %s)", uiURL, *configPath)
@@ -155,7 +161,7 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	busy := probePorts(cfg.Tools)
 	for _, t := range cfg.Tools {
 		st, msg := s.procs.State(t.Name)
-		tile := tileDTO{Kind: "tool", Name: t.Name, URL: t.URL, Status: st, Error: msg}
+		tile := tileDTO{Kind: "tool", Name: t.Name, URL: t.URL, Status: st, Error: msg, Adopted: s.procs.Adopted(t.Name)}
 		if st == StatusStopped || st == StatusError {
 			port, _ := toolPort(t.URL)
 			if owner := s.procs.PortOwner(port, t.Name); owner != "" {

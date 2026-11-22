@@ -31,8 +31,11 @@ const (
 var errPortBusy = errors.New("in use")
 
 type proc struct {
-	cmd      *exec.Cmd
-	port     string
+	cmd       *exec.Cmd // nil for adopted processes
+	pid       int
+	startTime int64 // OS process start time, see processStartTime
+	adopted   bool  // started by an earlier pult run
+	port      string
 	logs     *ringLog
 	status   Status
 	err      string
@@ -47,12 +50,21 @@ func (p *proc) active() bool {
 
 // Manager tracks the child processes started by the launcher.
 type Manager struct {
-	mu    sync.Mutex
-	procs map[string]*proc
+	mu        sync.Mutex
+	procs     map[string]*proc
+	statePath string // where running tools are recorded; "" disables it
 }
 
-func NewManager() *Manager {
-	return &Manager{procs: map[string]*proc{}}
+func NewManager(statePath string) *Manager {
+	return &Manager{procs: map[string]*proc{}, statePath: statePath}
+}
+
+// Adopted reports whether a tool was taken over from an earlier pult run.
+func (m *Manager) Adopted(name string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.procs[name]
+	return ok && p.adopted && p.active()
 }
 
 // State returns the status and last error of a tool.
@@ -125,6 +137,7 @@ func (m *Manager) EnsureRunning(cfg *Config, t Tool) error {
 			return err
 		}
 		m.procs[t.Name] = p
+		m.saveState()
 	}
 	m.mu.Unlock()
 
@@ -149,7 +162,7 @@ func (m *Manager) Stop(name string) error {
 		return nil
 	}
 	p.stopping = true
-	pid := p.cmd.Process.Pid
+	pid := p.pid
 	m.mu.Unlock()
 
 	if err := stopTree(pid, p.exited); err != nil {
@@ -224,13 +237,16 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 		return nil, fmt.Errorf("start failed: %w", err)
 	}
 
+	startTime, _ := processStartTime(cmd.Process.Pid)
 	p := &proc{
-		cmd:    cmd,
-		port:   port,
-		logs:   logs,
-		status: StatusStarting,
-		ready:  make(chan struct{}),
-		exited: make(chan struct{}),
+		cmd:       cmd,
+		pid:       cmd.Process.Pid,
+		startTime: startTime,
+		port:      port,
+		logs:      logs,
+		status:    StatusStarting,
+		ready:     make(chan struct{}),
+		exited:    make(chan struct{}),
 	}
 	go m.wait(p)
 	go m.waitReady(p, addr)
@@ -257,6 +273,7 @@ func (m *Manager) wait(p *proc) {
 			p.err += "\n" + strings.Join(tail, "\n")
 		}
 	}
+	m.saveState()
 	close(p.exited)
 }
 

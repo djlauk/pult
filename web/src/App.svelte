@@ -225,7 +225,9 @@
                 {#if tile.name in logs}
                   <pre class="logs" use:stickToBottom={logs[tile.name]}>{logs[tile.name].length
                       ? logs[tile.name].join('\n')
-                      : '(no output)'}</pre>
+                      : tile.adopted
+                        ? '(started by an earlier pult run; its output is not available)'
+                        : '(no output)'}</pre>
                 {/if}
               </div>
             {:else}

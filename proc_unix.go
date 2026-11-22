@@ -4,10 +4,30 @@ package main
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
+
+// processStartTime returns the start time of a running process (clock ticks
+// since boot, from /proc). alive is false if it is gone or a zombie.
+func processStartTime(pid int) (start int64, alive bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return 0, false
+	}
+	// The command name in field 2 may contain spaces; parse after its ')'.
+	s := string(data)
+	fields := strings.Fields(s[strings.LastIndexByte(s, ')')+1:])
+	if len(fields) < 20 || fields[0] == "Z" {
+		return 0, false
+	}
+	start, err = strconv.ParseInt(fields[19], 10, 64) // field 22: starttime
+	return start, err == nil
+}
 
 // stopTree sends SIGTERM to the child's process group, waits for the child
 // to exit (up to a grace period), then SIGKILLs whatever is left in the group.

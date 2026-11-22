@@ -4,3 +4,5 @@
 /web/node_modules/
 /web/dist/
 /tools.json
+/pult-state.json
+/pult-state.json.tmp
