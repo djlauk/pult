@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"reflect"
@@ -7,11 +7,11 @@ import (
 
 func TestSplitCommand(t *testing.T) {
 	cases := map[string][]string{
-		"./jlpt":                        {"./jlpt"},
-		"npm run start":                 {"npm", "run", "start"},
+		"./jlpt":                         {"./jlpt"},
+		"npm run start":                  {"npm", "run", "start"},
 		"uv run  scripts.liveview IM25b": {"uv", "run", "scripts.liveview", "IM25b"},
 		`"C:/Program Files/x.exe" -a ""`: {"C:/Program Files/x.exe", "-a", ""},
-		"":                              nil,
+		"":                               nil,
 	}
 	for in, want := range cases {
 		if got := splitCommand(in); !reflect.DeepEqual(got, want) {

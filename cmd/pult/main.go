@@ -14,24 +14,24 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
+	"pult/internal/launcher"
 	"pult/web"
 )
 
 type server struct {
 	configPath string
-	procs      *Manager
+	procs      *launcher.Manager
 }
 
 type tileDTO struct {
-	Kind   string `json:"kind"` // "tool" or "link"
-	Name   string `json:"name"`
-	URL    string `json:"url"`
-	Status Status `json:"status,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Kind   string          `json:"kind"` // "tool" or "link"
+	Name   string          `json:"name"`
+	URL    string          `json:"url"`
+	Status launcher.Status `json:"status,omitempty"`
+	Error  string          `json:"error,omitempty"`
 	// PortBusy is the port number when someone else holds this tool's port.
 	PortBusy string `json:"port_busy,omitempty"`
 	// BusyBy names the pult tool holding the port; empty for a foreign process.
@@ -59,7 +59,7 @@ func main() {
 		*configPath = filepath.Join(filepath.Dir(exe), "tools.json")
 	}
 	statePath := filepath.Join(filepath.Dir(*configPath), "pult-state.json")
-	s := &server{configPath: *configPath, procs: NewManager(statePath)}
+	s := &server{configPath: *configPath, procs: launcher.NewManager(statePath)}
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		log.Fatal(err)
@@ -80,7 +80,7 @@ func main() {
 	}
 	// Adopt only after binding, so a second pult instance exits before it
 	// touches the state file.
-	if cfg, err := LoadConfig(*configPath); err != nil {
+	if cfg, err := launcher.LoadConfig(*configPath); err != nil {
 		log.Printf("warning: %v", err)
 	} else {
 		s.procs.Adopt(cfg)
@@ -89,7 +89,7 @@ func main() {
 	log.Printf("pult listening on %s (config: %s)", uiURL, *configPath)
 	log.Printf("press Ctrl+C to quit")
 	if !*noBrowser {
-		if err := openBrowser(uiURL); err != nil {
+		if err := launcher.OpenBrowser(uiURL); err != nil {
 			log.Printf("open browser: %v", err)
 		}
 	}
@@ -138,7 +138,7 @@ func (s *server) handleSignals() {
 
 // handleTiles re-reads tools.json and returns all tiles grouped.
 func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
-	cfg, err := LoadConfig(s.configPath)
+	cfg, err := launcher.LoadConfig(s.configPath)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error(), "groups": []groupDTO{}})
 		return
@@ -159,12 +159,12 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		}
 		groups[i].Tiles = append(groups[i].Tiles, t)
 	}
-	busy := probePorts(cfg.Tools)
+	busy := launcher.ProbePorts(cfg.Tools)
 	for _, t := range cfg.Tools {
 		st, msg := s.procs.State(t.Name)
 		tile := tileDTO{Kind: "tool", Name: t.Name, URL: t.URL, Status: st, Error: msg, Adopted: s.procs.Adopted(t.Name)}
-		if st == StatusStopped || st == StatusError {
-			port, _ := toolPort(t.URL)
+		if st == launcher.StatusStopped || st == launcher.StatusError {
+			port, _ := launcher.ToolPort(t.URL)
 			if owner := s.procs.PortOwner(port, t.Name); owner != "" {
 				tile.PortBusy, tile.BusyBy = port, owner
 			} else if busy[t.URL] {
@@ -182,32 +182,9 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups, "running": len(s.procs.Running())})
 }
 
-// probePorts checks all tool ports in parallel; the result is keyed by URL.
-func probePorts(tools []Tool) map[string]bool {
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	busy := map[string]bool{}
-	for _, t := range tools {
-		addr, err := toolAddr(t.URL)
-		if err != nil {
-			continue
-		}
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			open := portOpen(addr)
-			mu.Lock()
-			busy[url] = open
-			mu.Unlock()
-		}(t.URL)
-	}
-	wg.Wait()
-	return busy
-}
-
 // handleOpen starts a tool if needed, waits for its port, then opens its URL.
 func (s *server) handleOpen(w http.ResponseWriter, r *http.Request) {
-	cfg, err := LoadConfig(s.configPath)
+	cfg, err := launcher.LoadConfig(s.configPath)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -218,13 +195,13 @@ func (s *server) handleOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.procs.EnsureRunning(cfg, t); err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": string(StatusError), "error": err.Error()})
+		writeJSON(w, http.StatusOK, map[string]string{"status": string(launcher.StatusError), "error": err.Error()})
 		return
 	}
-	if err := openBrowser(t.URL); err != nil {
+	if err := launcher.OpenBrowser(t.URL); err != nil {
 		log.Printf("open %s: %v", t.URL, err)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": string(StatusRunning)})
+	writeJSON(w, http.StatusOK, map[string]string{"status": string(launcher.StatusRunning)})
 }
 
 // handleStop terminates a tool's process tree.
@@ -233,7 +210,7 @@ func (s *server) handleStop(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": string(StatusStopped)})
+	writeJSON(w, http.StatusOK, map[string]string{"status": string(launcher.StatusStopped)})
 }
 
 // handleLogs returns the captured output of a tool's last run.

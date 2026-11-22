@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"encoding/json"
@@ -122,7 +122,7 @@ func checkConfig(cfg *Config, e stateEntry) string {
 	if !ok {
 		return "not in tools.json"
 	}
-	if port, _ := toolPort(t.URL); port != e.Port {
+	if port, _ := ToolPort(t.URL); port != e.Port {
 		return "port in tools.json differs (was " + e.Port + ")"
 	}
 	return ""

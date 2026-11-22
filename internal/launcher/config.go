@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"encoding/json"
@@ -62,7 +62,7 @@ func LoadConfig(path string) (*Config, error) {
 		if t.Start == "" {
 			return nil, fmt.Errorf("tool %q: missing start", t.Name)
 		}
-		if _, err := toolPort(t.URL); err != nil {
+		if _, err := ToolPort(t.URL); err != nil {
 			return nil, fmt.Errorf("tool %q: %w", t.Name, err)
 		}
 	}
@@ -93,7 +93,7 @@ func (c *Config) Tool(name string) (Tool, bool) {
 }
 
 // toolPort extracts the port from a tool URL, defaulting by scheme.
-func toolPort(raw string) (string, error) {
+func ToolPort(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return "", fmt.Errorf("invalid url %q", raw)
@@ -116,7 +116,7 @@ func toolAddr(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	port, err := toolPort(raw)
+	port, err := ToolPort(raw)
 	if err != nil {
 		return "", err
 	}

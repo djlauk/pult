@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"encoding/json"
@@ -146,4 +146,3 @@ func TestAdoptAfterConfigReverted(t *testing.T) {
 	m.mu.Unlock()
 	waitStatus(t, m, "a", StatusError)
 }
-

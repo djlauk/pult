@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"errors"
@@ -36,12 +36,12 @@ type proc struct {
 	startTime int64 // OS process start time, see processStartTime
 	adopted   bool  // started by an earlier pult run
 	port      string
-	logs     *ringLog
-	status   Status
-	err      string
-	stopping bool
-	ready    chan struct{} // closed once the port responds or the start failed
-	exited   chan struct{} // closed when the process exits
+	logs      *ringLog
+	status    Status
+	err       string
+	stopping  bool
+	ready     chan struct{} // closed once the port responds or the start failed
+	exited    chan struct{} // closed when the process exits
 }
 
 func (p *proc) active() bool {
@@ -218,7 +218,7 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 	if err != nil {
 		return nil, err
 	}
-	port, _ := toolPort(t.URL)
+	port, _ := ToolPort(t.URL)
 	if owner := m.portOwner(port, t.Name); owner != "" {
 		return nil, fmt.Errorf("port %s %w by: %s", port, errPortBusy, owner)
 	}
@@ -307,6 +307,29 @@ func (m *Manager) waitReady(p *proc, addr string) {
 		p.status, p.err = StatusError, fmt.Sprintf("port %s did not respond within %s", addr, startTimeout)
 	}
 	m.mu.Unlock()
+}
+
+// ProbePorts checks all tool ports in parallel; the result is keyed by URL.
+func ProbePorts(tools []Tool) map[string]bool {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	busy := map[string]bool{}
+	for _, t := range tools {
+		addr, err := toolAddr(t.URL)
+		if err != nil {
+			continue
+		}
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			open := portOpen(addr)
+			mu.Lock()
+			busy[url] = open
+			mu.Unlock()
+		}(t.URL)
+	}
+	wg.Wait()
+	return busy
 }
 
 func portOpen(addr string) bool {

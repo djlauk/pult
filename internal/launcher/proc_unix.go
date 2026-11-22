@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package launcher
 
 import (
 	"errors"
@@ -52,6 +52,6 @@ func sysProcAttr() *syscall.SysProcAttr {
 }
 
 // openBrowser opens a URL with the default handler.
-func openBrowser(url string) error {
+func OpenBrowser(url string) error {
 	return exec.Command("xdg-open", url).Start()
 }

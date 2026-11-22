@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package launcher
 
 import (
 	"fmt"
@@ -58,6 +58,6 @@ func sysProcAttr() *syscall.SysProcAttr {
 }
 
 // openBrowser opens a URL with the default handler.
-func openBrowser(url string) error {
+func OpenBrowser(url string) error {
 	return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 }

@@ -1,4 +1,4 @@
-package main
+package launcher
 
 import (
 	"bufio"
@@ -68,7 +68,7 @@ func buildEnv(t Tool, dir string) ([]string, error) {
 		e.Set(kv[0], kv[1])
 	}
 
-	port, err := toolPort(t.URL)
+	port, err := ToolPort(t.URL)
 	if err != nil {
 		return nil, err
 	}
