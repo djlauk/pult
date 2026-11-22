@@ -81,7 +81,6 @@ func main() {
 	mux.HandleFunc("POST /api/tools/{name}/open", s.handleOpen)
 	mux.HandleFunc("POST /api/tools/{name}/stop", s.handleStop)
 	mux.HandleFunc("GET /api/tools/{name}/logs", s.handleLogs)
-	mux.HandleFunc("POST /api/quit", s.handleQuit)
 	mux.HandleFunc("GET /favicon.ico", handleFavicon)
 	mux.Handle("GET /", http.FileServerFS(dist))
 
@@ -251,7 +250,7 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	if groups == nil {
 		groups = []groupDTO{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups, "running": len(s.procs.Running())})
+	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
 // handleOpen starts a tool if needed, waits for its port, then opens its URL.
@@ -288,23 +287,6 @@ func (s *server) handleStop(w http.ResponseWriter, r *http.Request) {
 // handleLogs returns the captured output of a tool's last run.
 func (s *server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"lines": s.procs.Logs(r.PathValue("name"))})
-}
-
-// handleQuit shuts the launcher down, optionally stopping running tools.
-func (s *server) handleQuit(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		StopTools bool `json:"stop_tools"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
-	if req.StopTools {
-		s.procs.StopAll()
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-	log.Printf("quit from UI (stop tools: %v)", req.StopTools)
-	go func() {
-		time.Sleep(200 * time.Millisecond) // let the response reach the browser
-		s.exit()
-	}()
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

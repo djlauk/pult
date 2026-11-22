@@ -2,12 +2,9 @@
   import { onMount } from 'svelte';
 
   let groups = $state([]);
-  let running = $state(0);
   let configError = $state('');
   let query = $state('');
   let logs = $state({}); // tool name -> lines, for tiles with logs open
-  let quitDialog;
-  let quitState = $state(''); // '', 'quitting', 'done'
   let searchEl;
   const pending = new Set(); // tools with an open/stop request in flight
 
@@ -16,7 +13,6 @@
   const api = (name, action) => `/api/tools/${encodeURIComponent(name)}/${action}`;
 
   async function load() {
-    if (quitState) return;
     try {
       const res = await fetch('/api/tiles');
       const data = await res.json();
@@ -28,7 +24,6 @@
             t.port_busy = '';
           }
       groups = data.groups;
-      running = data.running ?? 0;
       configError = data.error ?? '';
     } catch (e) {
       configError = 'Launcher not reachable: ' + e.message;
@@ -102,21 +97,6 @@
     load();
   }
 
-  async function quit(stopTools) {
-    quitDialog.close();
-    quitState = 'quitting';
-    try {
-      await fetch('/api/quit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stop_tools: stopTools }),
-      });
-    } catch (e) {
-      // The server exits right after answering.
-    }
-    quitState = 'done';
-  }
-
   function openLink(url) {
     if (isWeb(url)) window.open(url, '_blank', 'noopener');
     else location.href = url;
@@ -174,97 +154,73 @@
 
 <svelte:window onkeydown={onKeydown} onfocus={load} />
 
-{#if quitState}
-  <main class="quit">
-    <p>{quitState === 'done' ? 'pult has quit. You can close this tab.' : 'Quitting…'}</p>
-  </main>
-{:else}
-  <main>
-    <header>
-      <h1>pult</h1>
-      <input
-        bind:this={searchEl}
-        bind:value={query}
-        onkeydown={onSearchKey}
-        type="search"
-        placeholder="Search (press /)"
-        aria-label="Search tiles"
-      />
-      <button class="quit-btn" onclick={() => quitDialog.showModal()}>Quit</button>
-    </header>
+<main>
+  <header>
+    <h1>pult</h1>
+    <input
+      bind:this={searchEl}
+      bind:value={query}
+      onkeydown={onSearchKey}
+      type="search"
+      placeholder="Search (press /)"
+      aria-label="Search tiles"
+    />
+  </header>
 
-    {#if configError}
-      <p class="config-error">{configError}</p>
-    {/if}
-
-    {#each visible as group (group.name)}
-      <section>
-        <h2>{group.name}</h2>
-        <div class="tiles">
-          {#each group.tiles as tile (tile.kind + tile.name)}
-            {#if tile.kind === 'tool'}
-              <div class="tile tool {tile.status}" class:wide={tile.name in logs}>
-                <button class="main" onclick={() => openTool(tile.name)} title={tile.url}>
-                  <span class="name">{tile.name}</span>
-                  <span class="status">{tile.status}</span>
-                  {#if tile.port_busy}
-                    <span class="busy">
-                      Port {tile.port_busy} in use {tile.busy_by ? `by: ${tile.busy_by}` : 'by another process'}
-                    </span>
-                  {/if}
-                  {#if tile.error}<span class="error-text">{tile.error}</span>{/if}
-                </button>
-                <div class="actions">
-                  {#if isActive(tile)}
-                    <button onclick={() => stopTool(tile.name)}>Stop</button>
-                  {/if}
-                  <button onclick={() => toggleLogs(tile.name)} aria-expanded={tile.name in logs}>
-                    {tile.name in logs ? 'Hide logs' : 'Logs'}
-                  </button>
-                </div>
-                {#if tile.name in logs}
-                  <pre class="logs" use:stickToBottom={logs[tile.name]}>{logs[tile.name].length
-                      ? logs[tile.name].join('\n')
-                      : tile.adopted
-                        ? '(started by an earlier pult run; its output is not available)'
-                        : '(no output)'}</pre>
-                {/if}
-              </div>
-            {:else}
-              <a
-                class="tile link"
-                href={tile.url}
-                target={isWeb(tile.url) ? '_blank' : undefined}
-                rel="noopener"
-                title={tile.url}
-              >
-                <span class="name">{tile.name}</span>
-                <span class="status">link</span>
-              </a>
-            {/if}
-          {/each}
-        </div>
-      </section>
-    {/each}
-  </main>
-{/if}
-
-<dialog bind:this={quitDialog}>
-  {#if running > 0}
-    <p>{running} tool{running === 1 ? ' is' : 's are'} still running. Stop {running === 1 ? 'it' : 'them'} too?</p>
-    <div class="dialog-actions">
-      <button class="primary" onclick={() => quit(true)}>Stop tools and quit</button>
-      <button onclick={() => quit(false)}>Leave running and quit</button>
-      <button onclick={() => quitDialog.close()}>Cancel</button>
-    </div>
-  {:else}
-    <p>Quit pult?</p>
-    <div class="dialog-actions">
-      <button class="primary" onclick={() => quit(false)}>Quit</button>
-      <button onclick={() => quitDialog.close()}>Cancel</button>
-    </div>
+  {#if configError}
+    <p class="config-error">{configError}</p>
   {/if}
-</dialog>
+
+  {#each visible as group (group.name)}
+    <section>
+      <h2>{group.name}</h2>
+      <div class="tiles">
+        {#each group.tiles as tile (tile.kind + tile.name)}
+          {#if tile.kind === 'tool'}
+            <div class="tile tool {tile.status}" class:wide={tile.name in logs}>
+              <button class="main" onclick={() => openTool(tile.name)} title={tile.url}>
+                <span class="name">{tile.name}</span>
+                <span class="status">{tile.status}</span>
+                {#if tile.port_busy}
+                  <span class="busy">
+                    Port {tile.port_busy} in use {tile.busy_by ? `by: ${tile.busy_by}` : 'by another process'}
+                  </span>
+                {/if}
+                {#if tile.error}<span class="error-text">{tile.error}</span>{/if}
+              </button>
+              <div class="actions">
+                {#if isActive(tile)}
+                  <button onclick={() => stopTool(tile.name)}>Stop</button>
+                {/if}
+                <button onclick={() => toggleLogs(tile.name)} aria-expanded={tile.name in logs}>
+                  {tile.name in logs ? 'Hide logs' : 'Logs'}
+                </button>
+              </div>
+              {#if tile.name in logs}
+                <pre class="logs" use:stickToBottom={logs[tile.name]}>{logs[tile.name].length
+                    ? logs[tile.name].join('\n')
+                    : tile.adopted
+                      ? '(started by an earlier pult run; its output is not available)'
+                      : '(no output)'}</pre>
+              {/if}
+            </div>
+          {:else}
+            <a
+              class="tile link"
+              href={tile.url}
+              target={isWeb(tile.url) ? '_blank' : undefined}
+              rel="noopener"
+              title={tile.url}
+            >
+              <span class="name">{tile.name}</span>
+              <span class="status">link</span>
+            </a>
+          {/if}
+        {/each}
+      </div>
+    </section>
+  {/each}
+</main>
 
 <style>
   :global(:root) {
@@ -303,11 +259,6 @@
     margin: 0 auto;
     padding: 24px 16px;
   }
-  main.quit {
-    padding-top: 120px;
-    text-align: center;
-    color: var(--muted);
-  }
   header {
     display: flex;
     align-items: center;
@@ -332,21 +283,14 @@
     font: inherit;
     color: inherit;
   }
-  .quit-btn,
-  .actions button,
-  .dialog-actions button {
+  .actions button {
     padding: 4px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--tile);
     cursor: pointer;
   }
-  .quit-btn {
-    margin-left: auto;
-  }
-  .quit-btn:hover,
-  .actions button:hover,
-  .dialog-actions button:hover {
+  .actions button:hover {
     border-color: var(--muted);
   }
   h2 {
@@ -452,28 +396,5 @@
     font: 12px/1.45 ui-monospace, monospace;
     white-space: pre-wrap;
     word-break: break-word;
-  }
-  dialog {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--tile);
-    color: var(--text);
-    padding: 20px;
-    max-width: 420px;
-  }
-  dialog::backdrop {
-    background: rgb(0 0 0 / 0.35);
-  }
-  dialog p {
-    margin: 0 0 16px;
-  }
-  .dialog-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .dialog-actions .primary {
-    border-color: var(--text);
-    font-weight: 600;
   }
 </style>
