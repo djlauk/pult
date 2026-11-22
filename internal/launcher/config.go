@@ -2,7 +2,9 @@ package launcher
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -37,6 +39,9 @@ type Config struct {
 // LoadConfig reads and validates tools.json at path.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("tools.json not found at %s (create it there or start pult with -config)", path)
+	}
 	if err != nil {
 		return nil, err
 	}

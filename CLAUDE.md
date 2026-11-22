@@ -19,13 +19,14 @@ Local launcher for my tools. Read SPEC.md first; it is the source of truth.
 - `cmd/pult/`: entry point and HTTP handlers.
 - `internal/launcher/`: config, environment, processes, logs, state file.
 - `web/`: Svelte frontend; `web/embed.go` embeds `web/dist`.
-- `bin/` (gitignored): binaries plus the data files next to them (`tools.json`, `pult-state.json`). Never commit data files.
+- `bin/` (gitignored): build output only.
+- Data files live outside the repo: `tools.json` in `%AppData%\pult\` (`~/.config/pult/`), `pult-state.json` in `%LocalAppData%\pult\` (`~/.cache/pult/`). Never commit data files.
 
 ## Commands
 - Frontend deps (once): `npm --prefix web install`
 - Build frontend (required before `go build`, it is embedded): `npm --prefix web run build`
 - Build: `go build -o bin/pult.exe ./cmd/pult`
-- Run: `bin/pult.exe` (flags: `-port 7300`, `-config path/to/tools.json`, `-no-browser`)
+- Run: `bin/pult.exe` (flags: `-port 7300`, `-config path/to/tools.json` to override the default location, `-no-browser`)
 - Frontend dev: run `bin/pult.exe -no-browser`, then `npm --prefix web run dev` (Vite proxies `/api` to :7300)
 - Cross-compile Linux: `$env:GOOS='linux'; go build -o bin/pult-linux ./cmd/pult; Remove-Item Env:GOOS`
 - Tests: `go test ./...`

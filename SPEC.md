@@ -9,12 +9,14 @@ A small local launcher that shows tools and links as tiles, starts tools with a 
 - Target 1: Windows. Target 2: Linux (cross-compile with `GOOS=linux`). No Mac support planned.
 - Listens on `127.0.0.1` only.
 
-## Configuration: `tools.json` next to the binary
+## Configuration: `tools.json`
+
+Location: `pult/tools.json` in the user config directory (`os.UserConfigDir()`: `%AppData%\pult\tools.json` on Windows, `~/.config/pult/tools.json` on Linux). `-config path/to/tools.json` overrides it. If the file is missing, the launcher says where it looked. The config lives outside the source tree so it can't be deleted by accident.
 
 **Tool fields:** `name`, `group`, `dir`, `start`, `url`, optional `env`, optional `start_windows`.
 **Link fields:** `name`, `group`, `url` (also `obsidian://…`). Links have no start command.
 
-- `dir`: working directory, relative to `tools.json`. Set via `cmd.Dir` on the child process. The launcher itself never changes its own working directory.
+- `dir`: working directory, absolute or relative to `tools.json` (not to the binary). Set via `cmd.Dir` on the child process. The launcher itself never changes its own working directory.
 - `start`: command without platform extension (`./jlpt`, `npm run start`, `uv run …`). Windows resolves `.exe/.bat/.cmd` via PATHEXT. Paths containing a slash are resolved to absolute paths against `dir`.
 - `start_windows`: optional override, only if needed.
 - `url`: the port is read from it (a path like `/settings` is ignored for the check but opened in full in the browser).
@@ -54,7 +56,7 @@ A small local launcher that shows tools and links as tiles, starts tools with a 
   - Linux: own process group (`Setpgid`) and signal sent to the group.
 - **Logs:** stdout/stderr of each tool goes into a ring buffer, shown in the UI as a collapsible view per tile. Helps with "doesn't start".
 - **Quitting the launcher:** Asks whether running tools should be stopped as well (Quit button in the UI, or Ctrl+C in the console). Closing the console window cannot ask; it leaves tools running.
-- **Remembering tools across runs:** Running tools are recorded in `pult-state.json` next to `tools.json` (name, root PID, process start time, port; not synced). On startup and on every page load, the launcher adopts an entry if the tool is still in `tools.json` with the same port and the PID still belongs to the same process (start time matches). Adopted tools show as running and can be stopped from the UI; their earlier output is not available. Entries that don't match `tools.json` are kept and retried; only a dead process or a reused PID drops an entry. Remembered processes are never killed automatically.
+- **Remembering tools across runs:** Running tools are recorded in `pult-state.json` (name, root PID, process start time, port). It lives in the user cache directory (`os.UserCacheDir()`: `%LocalAppData%\pult\` on Windows, `~/.cache/pult/` on Linux), because PIDs only make sense on this machine; with `-config`, it sits next to that `tools.json` so separate setups don't mix. Losing it only means forgetting tools left running. On startup and on every page load, the launcher adopts an entry if the tool is still in `tools.json` with the same port and the PID still belongs to the same process (start time matches). Adopted tools show as running and can be stopped from the UI; their earlier output is not available. Entries that don't match `tools.json` are kept and retried; only a dead process or a reused PID drops an entry. Remembered processes are never killed automatically.
 - **Groups:** Tiles grouped by `group`, order as in the file. Optional "Experiments" group for new things.
 - **Search:** Pressing `/` focuses a search field, Enter opens the first matching tile.
 - `tools.json` is re-read on every page load so new tools appear without a restart.

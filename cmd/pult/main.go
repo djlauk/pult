@@ -47,19 +47,15 @@ type groupDTO struct {
 
 func main() {
 	port := flag.Int("port", 7300, "port for the launcher UI")
-	configPath := flag.String("config", "", "path to tools.json (default: next to the binary)")
+	configFlag := flag.String("config", "", "path to tools.json (default: pult/tools.json in the user config dir)")
 	noBrowser := flag.Bool("no-browser", false, "do not open the launcher UI on startup")
 	flag.Parse()
 
-	if *configPath == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			log.Fatal(err)
-		}
-		*configPath = filepath.Join(filepath.Dir(exe), "tools.json")
+	configPath, statePath, err := resolvePaths(*configFlag)
+	if err != nil {
+		log.Fatal(err)
 	}
-	statePath := filepath.Join(filepath.Dir(*configPath), "pult-state.json")
-	s := &server{configPath: *configPath, procs: launcher.NewManager(statePath)}
+	s := &server{configPath: configPath, procs: launcher.NewManager(statePath)}
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		log.Fatal(err)
@@ -80,13 +76,15 @@ func main() {
 	}
 	// Adopt only after binding, so a second pult instance exits before it
 	// touches the state file.
-	if cfg, err := launcher.LoadConfig(*configPath); err != nil {
+	if cfg, err := launcher.LoadConfig(configPath); err != nil {
 		log.Printf("warning: %v", err)
 	} else {
 		s.procs.Adopt(cfg)
 	}
 	uiURL := "http://" + addr + "/"
-	log.Printf("pult listening on %s (config: %s)", uiURL, *configPath)
+	log.Printf("pult listening on %s", uiURL)
+	log.Printf("config: %s", configPath)
+	log.Printf("state:  %s", statePath)
 	log.Printf("press Ctrl+C to quit")
 	if !*noBrowser {
 		if err := launcher.OpenBrowser(uiURL); err != nil {
@@ -95,6 +93,34 @@ func main() {
 	}
 	go s.handleSignals()
 	log.Fatal(http.Serve(ln, mux))
+}
+
+// resolvePaths returns where tools.json and the state file live. Without
+// -config, tools.json is in the user config dir (%AppData%\pult,
+// ~/.config/pult) and the state in the user cache dir (%LocalAppData%\pult,
+// ~/.cache/pult), since pids only make sense on this machine. With -config,
+// the state file sits next to that config so separate setups don't mix.
+func resolvePaths(configFlag string) (configPath, statePath string, err error) {
+	if configFlag != "" {
+		configPath, err = filepath.Abs(configFlag)
+		if err != nil {
+			return "", "", err
+		}
+		return configPath, filepath.Join(filepath.Dir(configPath), "pult-state.json"), nil
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", "", err
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", "", err
+	}
+	stateDir := filepath.Join(cacheDir, "pult")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return "", "", err
+	}
+	return filepath.Join(configDir, "pult", "tools.json"), filepath.Join(stateDir, "pult-state.json"), nil
 }
 
 // handleSignals implements quitting from the console. Ctrl+C asks whether
