@@ -4,7 +4,8 @@
 A small local launcher that shows tools and links as tiles, starts tools with a click, and can stop them again. It replaces no method and no vault; it is only the entry point.
 
 ## Stack
-- Go backend, Svelte frontend, embedded via `go:embed`. A single binary with no runtime dependencies. Go dependencies: standard library plus `fyne.io/systray` (tray icon).
+- Go backend, Svelte frontend, embedded via `go:embed`. A single binary with no runtime dependencies. Go dependencies: standard library plus `fyne.io/systray` (tray icon). Build-time only: `github.com/tc-hib/winres` generates the Windows EXE resources (icon, version info) into a committed `.syso` file.
+- One icon, drawn in code, for the tray, the favicon and the EXE. The version (`brand.Version`) appears in the EXE properties, the tray tooltip and the log.
 - Binary: `pult.exe` (Windows) or `pult` (Linux). Repo folder: `pult`.
 - Target 1: Windows. Target 2: Linux (cross-compile with `GOOS=linux`). No Mac support planned.
 - Listens on `127.0.0.1` only.

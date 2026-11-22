@@ -16,7 +16,9 @@ Local launcher for my tools. Read SPEC.md first; it is the source of truth.
 - Platform-specific code (process-tree kill, process start time, opening the browser) lives in `internal/launcher/proc_windows.go` / `proc_unix.go` with build tags.
 
 ## Layout
-- `cmd/pult/`: entry point, HTTP handlers, tray icon and menu.
+- `cmd/pult/`: entry point, HTTP handlers, tray icon and menu. `rsrc_windows_amd64.syso` (committed, generated) holds the EXE icon and version info.
+- `internal/brand/`: version number and the icon, drawn in code (tray, favicon, EXE).
+- `internal/winresgen/`: generator for the `.syso`; the only user of `github.com/tc-hib/winres`.
 - `internal/launcher/`: config, environment, processes, logs, state file.
 - `web/`: Svelte frontend; `web/embed.go` embeds `web/dist`.
 - `bin/` (gitignored): build output only.
@@ -25,6 +27,7 @@ Local launcher for my tools. Read SPEC.md first; it is the source of truth.
 ## Commands
 - Frontend deps (once): `npm --prefix web install`
 - Build frontend (required before `go build`, it is embedded): `npm --prefix web run build`
+- After changing the icon or `brand.Version`: `go generate ./cmd/pult`, then commit `cmd/pult/rsrc_windows_amd64.syso`.
 - Build (tray app, no console window): `go build -ldflags "-H=windowsgui" -o bin/pult.exe ./cmd/pult`
 - Build with console (debugging, shows the log live): `go build -o bin/pult-console.exe ./cmd/pult`
 - Run: `bin/pult.exe` (flags: `-port 7300`, `-config path/to/tools.json` to override the default location, `-no-browser`)

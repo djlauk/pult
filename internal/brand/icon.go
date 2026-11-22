@@ -1,4 +1,7 @@
-package main
+// Package brand holds pult's version and icon. The icon is drawn in code
+// and used for the tray, the favicon and the Windows EXE resources, so all
+// of them always match.
+package brand
 
 import (
 	"bytes"
@@ -6,18 +9,20 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"net/http"
 )
 
-// The tray icon is a 2×2 grid of tiles, drawn in code so there is no image
-// asset to maintain.
+// Version is pult's version, shown in the log, the tray tooltip and the
+// EXE file properties. After changing it, run `go generate ./cmd/pult`.
+const Version = "1.0.0"
+
 // Four shades of green, light to dark in reading order.
 var tileColors = [2][2]color.NRGBA{
 	{{0x86, 0xd1, 0x8f, 0xff}, {0x4c, 0xb0, 0x5c, 0xff}},
 	{{0x2e, 0x8b, 0x43, 0xff}, {0x1b, 0x5e, 0x2c, 0xff}},
 }
 
-func drawIcon(n int) *image.NRGBA {
+// Icon draws the icon, a 2×2 grid of tiles, at n×n pixels.
+func Icon(n int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, n, n))
 	margin := n / 8
 	gap := max(1, n/12)
@@ -37,30 +42,20 @@ func drawIcon(n int) *image.NRGBA {
 	return img
 }
 
-var faviconICO = iconICO()
-
-// handleFavicon serves the tray icon as the web UI's favicon, so both
-// always look the same.
-func handleFavicon(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", "max-age=86400")
-	w.Write(faviconICO)
-}
-
-// iconPNG returns the icon as PNG (used by the Linux tray).
-func iconPNG() []byte {
+// PNG returns the icon as a 32 px PNG (used by the Linux tray).
+func PNG() []byte {
 	var buf bytes.Buffer
-	png.Encode(&buf, drawIcon(32))
+	png.Encode(&buf, Icon(32))
 	return buf.Bytes()
 }
 
-// iconICO returns the icon as a Windows .ico with 16, 32 and 48 px images,
-// each a 32-bit BGRA bitmap.
-func iconICO() []byte {
+// ICO returns the icon as a Windows .ico with 16, 32 and 48 px images,
+// each a 32-bit BGRA bitmap (used by the Windows tray and the favicon).
+func ICO() []byte {
 	sizes := []int{16, 32, 48}
 	var images [][]byte
 	for _, n := range sizes {
-		images = append(images, icoBitmap(drawIcon(n)))
+		images = append(images, icoBitmap(Icon(n)))
 	}
 
 	var buf bytes.Buffer

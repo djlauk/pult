@@ -1,4 +1,4 @@
-package main
+package brand
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestIconPNG(t *testing.T) {
-	img, err := png.Decode(bytes.NewReader(iconPNG()))
+	img, err := png.Decode(bytes.NewReader(PNG()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +18,7 @@ func TestIconPNG(t *testing.T) {
 }
 
 func TestIconICO(t *testing.T) {
-	ico := iconICO()
+	ico := ICO()
 	le := binary.LittleEndian
 	if le.Uint16(ico[0:]) != 0 || le.Uint16(ico[2:]) != 1 || le.Uint16(ico[4:]) != 3 {
 		t.Fatalf("bad header % x", ico[:6])

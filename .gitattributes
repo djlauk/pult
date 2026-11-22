@@ -5,3 +5,6 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+
+# Generated Windows resources (icon, version info); never touch line endings.
+*.syso binary

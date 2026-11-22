@@ -1,3 +1,6 @@
+// Windows EXE icon and version info; see internal/winresgen.
+//go:generate go run ../../internal/winresgen
+
 package main
 
 import (
@@ -18,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"pult/internal/brand"
 	"pult/internal/launcher"
 	"pult/web"
 )
@@ -99,7 +103,7 @@ func main() {
 	} else {
 		s.procs.Adopt(cfg)
 	}
-	log.Printf("pult listening on %s", s.uiURL)
+	log.Printf("pult %s listening on %s", brand.Version, s.uiURL)
 	log.Printf("config: %s", configPath)
 	log.Printf("state:  %s", statePath)
 	log.Printf("log:    %s", logPath)

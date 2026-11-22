@@ -6,6 +6,7 @@ import (
 
 	"fyne.io/systray"
 
+	"pult/internal/brand"
 	"pult/internal/launcher"
 )
 
@@ -17,12 +18,12 @@ func (s *server) runTray() {
 
 func (s *server) onTrayReady() {
 	if runtime.GOOS == "windows" {
-		systray.SetIcon(iconICO())
+		systray.SetIcon(brand.ICO())
 	} else {
-		systray.SetIcon(iconPNG())
+		systray.SetIcon(brand.PNG())
 	}
 	systray.SetTitle("pult")
-	systray.SetTooltip("pult")
+	systray.SetTooltip("pult " + brand.Version)
 	systray.SetOnTapped(s.openUI) // left click
 
 	open := systray.AddMenuItem("Open pult", "Open the launcher in the browser")
