@@ -11,10 +11,11 @@ import (
 
 // The tray icon is a 2×2 grid of tiles, drawn in code so there is no image
 // asset to maintain.
-var (
-	tileColor   = color.NRGBA{0x3b, 0x82, 0xf6, 0xff} // blue
-	accentColor = color.NRGBA{0x2e, 0xa0, 0x4f, 0xff} // green, one "running" tile
-)
+// Four shades of green, light to dark in reading order.
+var tileColors = [2][2]color.NRGBA{
+	{{0x86, 0xd1, 0x8f, 0xff}, {0x4c, 0xb0, 0x5c, 0xff}},
+	{{0x2e, 0x8b, 0x43, 0xff}, {0x1b, 0x5e, 0x2c, 0xff}},
+}
 
 func drawIcon(n int) *image.NRGBA {
 	img := image.NewNRGBA(image.Rect(0, 0, n, n))
@@ -23,10 +24,7 @@ func drawIcon(n int) *image.NRGBA {
 	tile := (n - 2*margin - gap) / 2
 	for row := 0; row < 2; row++ {
 		for col := 0; col < 2; col++ {
-			c := tileColor
-			if row == 1 && col == 1 {
-				c = accentColor
-			}
+			c := tileColors[row][col]
 			x0 := margin + col*(tile+gap)
 			y0 := margin + row*(tile+gap)
 			for y := y0; y < y0+tile; y++ {
