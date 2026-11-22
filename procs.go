@@ -25,6 +25,8 @@ const (
 
 const startTimeout = 30 * time.Second
 
+var errPortBusy = errors.New("in use")
+
 type proc struct {
 	cmd    *exec.Cmd
 	status Status
@@ -62,6 +64,10 @@ func (m *Manager) EnsureRunning(cfg *Config, t Tool) error {
 	if !ok || p.status == StatusStopped || p.status == StatusError {
 		var err error
 		p, err = m.start(cfg, t)
+		if errors.Is(err, errPortBusy) {
+			m.mu.Unlock()
+			return err // not a tool failure; the tile shows the busy port
+		}
 		if err != nil {
 			m.procs[t.Name] = &proc{status: StatusError, err: err.Error()}
 			m.mu.Unlock()
@@ -102,9 +108,18 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 	if err != nil {
 		return nil, err
 	}
+	if portOpen(addr) {
+		port, _ := toolPort(t.URL)
+		return nil, fmt.Errorf("port %s: %w", port, errPortBusy)
+	}
+	env, err := buildEnv(t, dir)
+	if err != nil {
+		return nil, err
+	}
 
 	cmd := exec.Command(exe, args[1:]...)
 	cmd.Dir = dir
+	cmd.Env = env
 	cmd.SysProcAttr = sysProcAttr()
 	// stdout/stderr go to the null device until logs land in milestone 3.
 	if err := cmd.Start(); err != nil {

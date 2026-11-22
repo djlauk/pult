@@ -5,6 +5,7 @@
   let configError = $state('');
   let query = $state('');
   let searchEl;
+  const pending = new Set(); // tools with an open request in flight
 
   const isWeb = (url) => /^https?:/i.test(url);
 
@@ -12,6 +13,13 @@
     try {
       const res = await fetch('/api/tiles');
       const data = await res.json();
+      for (const g of data.groups)
+        for (const t of g.tiles)
+          if (pending.has(t.name)) {
+            t.status = 'starting';
+            t.error = '';
+            t.port_busy = '';
+          }
       groups = data.groups;
       configError = data.error ?? '';
     } catch (e) {
@@ -36,17 +44,18 @@
 
   async function openTool(name) {
     const tile = findTile(name);
-    if (!tile || tile.status === 'starting') return;
+    if (!tile || pending.has(name)) return;
+    pending.add(name);
     tile.status = 'starting';
     tile.error = '';
+    tile.port_busy = '';
     try {
-      const res = await fetch(`/api/tools/${encodeURIComponent(name)}/open`, { method: 'POST' });
-      const data = await res.json();
-      tile.status = data.status ?? 'error';
-      tile.error = data.error ?? '';
+      await fetch(`/api/tools/${encodeURIComponent(name)}/open`, { method: 'POST' });
     } catch (e) {
-      tile.status = 'error';
-      tile.error = e.message;
+      // The next load() shows the server-side state.
+    } finally {
+      pending.delete(name);
+      load();
     }
   }
 
@@ -78,7 +87,13 @@
     }
   }
 
-  onMount(load);
+  onMount(() => {
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, 2000);
+    return () => clearInterval(timer);
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} onfocus={load} />
@@ -109,6 +124,7 @@
             <button class="tile tool {tile.status}" onclick={() => openTool(tile.name)} title={tile.url}>
               <span class="name">{tile.name}</span>
               <span class="status">{tile.status}</span>
+              {#if tile.port_busy}<span class="busy">port {tile.port_busy} in use</span>{/if}
               {#if tile.error}<span class="error">{tile.error}</span>{/if}
             </button>
           {:else}
@@ -241,6 +257,10 @@
   .tile .error,
   .config-error {
     color: var(--error);
+  }
+  .tile .busy {
+    font-size: 12px;
+    color: var(--starting);
   }
   .tile .error {
     font-size: 12px;

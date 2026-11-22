@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"pult/web"
 )
@@ -25,6 +26,31 @@ type tileDTO struct {
 	URL    string `json:"url"`
 	Status Status `json:"status,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// PortBusy is the port number when a tool not run by pult holds it.
+	PortBusy string `json:"port_busy,omitempty"`
+}
+
+// probePorts checks all tool ports in parallel; the result is keyed by URL.
+func probePorts(tools []Tool) map[string]bool {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	busy := map[string]bool{}
+	for _, t := range tools {
+		addr, err := toolAddr(t.URL)
+		if err != nil {
+			continue
+		}
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			open := portOpen(addr)
+			mu.Lock()
+			busy[url] = open
+			mu.Unlock()
+		}(t.URL)
+	}
+	wg.Wait()
+	return busy
 }
 
 type groupDTO struct {
@@ -97,9 +123,14 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		}
 		groups[i].Tiles = append(groups[i].Tiles, t)
 	}
+	busy := probePorts(cfg.Tools)
 	for _, t := range cfg.Tools {
 		st, msg := s.procs.State(t.Name)
-		add(t.Group, tileDTO{Kind: "tool", Name: t.Name, URL: t.URL, Status: st, Error: msg})
+		tile := tileDTO{Kind: "tool", Name: t.Name, URL: t.URL, Status: st, Error: msg}
+		if (st == StatusStopped || st == StatusError) && busy[t.URL] {
+			tile.PortBusy, _ = toolPort(t.URL)
+		}
+		add(t.Group, tile)
 	}
 	for _, l := range cfg.Links {
 		add(l.Group, tileDTO{Kind: "link", Name: l.Name, URL: l.URL})
