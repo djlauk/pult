@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [svelte()],
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
-    proxy: { '/api': 'http://127.0.0.1:7300' },
+    proxy: {
+      '/api': 'http://127.0.0.1:7300',
+      '/favicon.ico': 'http://127.0.0.1:7300',
+    },
   },
 });

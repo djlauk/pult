@@ -78,6 +78,7 @@ func main() {
 	mux.HandleFunc("POST /api/tools/{name}/stop", s.handleStop)
 	mux.HandleFunc("GET /api/tools/{name}/logs", s.handleLogs)
 	mux.HandleFunc("POST /api/quit", s.handleQuit)
+	mux.HandleFunc("GET /favicon.ico", handleFavicon)
 	mux.Handle("GET /", http.FileServerFS(dist))
 
 	ln, err := net.Listen("tcp", addr)

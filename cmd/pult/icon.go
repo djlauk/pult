@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/http"
 )
 
 // The tray icon is a 2×2 grid of tiles, drawn in code so there is no image
@@ -36,6 +37,16 @@ func drawIcon(n int) *image.NRGBA {
 		}
 	}
 	return img
+}
+
+var faviconICO = iconICO()
+
+// handleFavicon serves the tray icon as the web UI's favicon, so both
+// always look the same.
+func handleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "max-age=86400")
+	w.Write(faviconICO)
 }
 
 // iconPNG returns the icon as PNG (used by the Linux tray).
