@@ -51,7 +51,7 @@ func sysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Setpgid: true}
 }
 
-// openBrowser opens a URL with the default handler.
-func OpenBrowser(url string) error {
+// OpenDefault opens a URL or file with its default handler (browser, editor).
+func OpenDefault(url string) error {
 	return exec.Command("xdg-open", url).Start()
 }

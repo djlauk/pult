@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -23,6 +24,8 @@ import (
 
 type server struct {
 	configPath string
+	uiURL      string
+	logPath    string
 	procs      *launcher.Manager
 }
 
@@ -55,7 +58,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s := &server{configPath: configPath, procs: launcher.NewManager(statePath)}
+	logPath := filepath.Join(filepath.Dir(statePath), "pult.log")
+	setupLog(logPath)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))
+	s := &server{
+		configPath: configPath,
+		uiURL:      "http://" + addr + "/",
+		logPath:    logPath,
+		procs:      launcher.NewManager(statePath),
+	}
 	dist, err := fs.Sub(web.Dist, "dist")
 	if err != nil {
 		log.Fatal(err)
@@ -69,9 +80,15 @@ func main() {
 	mux.HandleFunc("POST /api/quit", s.handleQuit)
 	mux.Handle("GET /", http.FileServerFS(dist))
 
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(*port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		// Without a console the error would go unseen. If pult already runs
+		// there, starting it again just opens its UI.
+		if pultRunning(s.uiURL) {
+			log.Printf("pult already running on %s; opening it", s.uiURL)
+			s.openUI()
+			return
+		}
 		log.Fatal(err)
 	}
 	// Adopt only after binding, so a second pult instance exits before it
@@ -81,18 +98,39 @@ func main() {
 	} else {
 		s.procs.Adopt(cfg)
 	}
-	uiURL := "http://" + addr + "/"
-	log.Printf("pult listening on %s", uiURL)
+	log.Printf("pult listening on %s", s.uiURL)
 	log.Printf("config: %s", configPath)
 	log.Printf("state:  %s", statePath)
-	log.Printf("press Ctrl+C to quit")
+	log.Printf("log:    %s", logPath)
 	if !*noBrowser {
-		if err := launcher.OpenBrowser(uiURL); err != nil {
-			log.Printf("open browser: %v", err)
-		}
+		s.openUI()
 	}
 	go s.handleSignals()
-	log.Fatal(http.Serve(ln, mux))
+	go func() { log.Fatal(http.Serve(ln, mux)) }()
+	s.runTray() // blocks until quit
+}
+
+// setupLog writes pult's own log to a file, and to stderr when there is a
+// console. The file is truncated on each start.
+func setupLog(path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		log.Printf("log file: %v", err)
+		return
+	}
+	// The file comes first: without a console, writes to stderr fail.
+	log.SetOutput(io.MultiWriter(f, os.Stderr))
+}
+
+// pultRunning reports whether a pult instance answers at uiURL.
+func pultRunning(uiURL string) bool {
+	c := http.Client{Timeout: time.Second}
+	res, err := c.Get(uiURL + "api/tiles")
+	if err != nil {
+		return false
+	}
+	res.Body.Close()
+	return res.StatusCode == http.StatusOK
 }
 
 // resolvePaths returns where tools.json and the state file live. Without
@@ -133,7 +171,8 @@ func (s *server) handleSignals() {
 	for sig := range sigs {
 		running := s.procs.Running()
 		if len(running) == 0 || sig != os.Interrupt {
-			os.Exit(0)
+			s.exit()
+			return
 		}
 		fmt.Printf("\nStop %d running tool(s) too? (%s)\n[Y]es, [n]o (leave running), [c]ancel: ",
 			len(running), strings.Join(running, ", "))
@@ -145,7 +184,8 @@ func (s *server) handleSignals() {
 		select {
 		case <-sigs:
 			fmt.Println("\nQuitting, tools left running.")
-			os.Exit(0)
+			s.exit()
+			return
 		case a := <-answer:
 			switch a {
 			case "c":
@@ -157,7 +197,8 @@ func (s *server) handleSignals() {
 				fmt.Println("Stopping tools...")
 				s.procs.StopAll()
 			}
-			os.Exit(0)
+			s.exit()
+			return
 		}
 	}
 }
@@ -224,7 +265,7 @@ func (s *server) handleOpen(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": string(launcher.StatusError), "error": err.Error()})
 		return
 	}
-	if err := launcher.OpenBrowser(t.URL); err != nil {
+	if err := launcher.OpenDefault(t.URL); err != nil {
 		log.Printf("open %s: %v", t.URL, err)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": string(launcher.StatusRunning)})
@@ -257,7 +298,7 @@ func (s *server) handleQuit(w http.ResponseWriter, r *http.Request) {
 	log.Printf("quit from UI (stop tools: %v)", req.StopTools)
 	go func() {
 		time.Sleep(200 * time.Millisecond) // let the response reach the browser
-		os.Exit(0)
+		s.exit()
 	}()
 }
 

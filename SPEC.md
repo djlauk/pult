@@ -4,7 +4,7 @@
 A small local launcher that shows tools and links as tiles, starts tools with a click, and can stop them again. It replaces no method and no vault; it is only the entry point.
 
 ## Stack
-- Go backend, Svelte frontend, embedded via `go:embed`. A single binary with no runtime dependencies.
+- Go backend, Svelte frontend, embedded via `go:embed`. A single binary with no runtime dependencies. Go dependencies: standard library plus `fyne.io/systray` (tray icon).
 - Binary: `pult.exe` (Windows) or `pult` (Linux). Repo folder: `pult`.
 - Target 1: Windows. Target 2: Linux (cross-compile with `GOOS=linux`). No Mac support planned.
 - Listens on `127.0.0.1` only.
@@ -55,7 +55,10 @@ Location: `pult/tools.json` in the user config directory (`os.UserConfigDir()`: 
   - Windows: `taskkill /T /F /PID …` (because `npm` → `node`).
   - Linux: own process group (`Setpgid`) and signal sent to the group.
 - **Logs:** stdout/stderr of each tool goes into a ring buffer, shown in the UI as a collapsible view per tile. Helps with "doesn't start".
-- **Quitting the launcher:** Asks whether running tools should be stopped as well (Quit button in the UI, or Ctrl+C in the console). Closing the console window cannot ask; it leaves tools running.
+- **Tray icon:** pult runs as a tray icon without a console window (Windows build with `-H=windowsgui`; uses `fyne.io/systray`). Left click opens the UI. Menu: *Open pult*, *Show log* (opens `pult.log` in the default editor), *Quit and stop tools*, *Quit and leave running*. On Linux the tray needs a StatusNotifier host (GNOME: AppIndicator extension).
+- **Launcher log:** pult's own messages (adoption, quitting, errors) go to `pult.log` next to `pult-state.json`, truncated on each start, and to the console if there is one.
+- **Second start:** If pult is already running, starting it again opens the running instance's UI and exits.
+- **Quitting the launcher:** Asks whether running tools should be stopped as well: the two tray menu items, the Quit button in the UI, or Ctrl+C in a console. SIGTERM or closing a console window cannot ask; it leaves tools running.
 - **Remembering tools across runs:** Running tools are recorded in `pult-state.json` (name, root PID, process start time, port). It lives in the user cache directory (`os.UserCacheDir()`: `%LocalAppData%\pult\` on Windows, `~/.cache/pult/` on Linux), because PIDs only make sense on this machine; with `-config`, it sits next to that `tools.json` so separate setups don't mix. Losing it only means forgetting tools left running. On startup and on every page load, the launcher adopts an entry if the tool is still in `tools.json` with the same port and the PID still belongs to the same process (start time matches). Adopted tools show as running and can be stopped from the UI; their earlier output is not available. Entries that don't match `tools.json` are kept and retried; only a dead process or a reused PID drops an entry. Remembered processes are never killed automatically.
 - **Groups:** Tiles grouped by `group`, order as in the file. Optional "Experiments" group for new things.
 - **Search:** Pressing `/` focuses a search field, Enter opens the first matching tile.
