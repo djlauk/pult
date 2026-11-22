@@ -29,6 +29,7 @@ var errPortBusy = errors.New("in use")
 
 type proc struct {
 	cmd    *exec.Cmd
+	logs   *ringLog
 	status Status
 	err    string
 	ready  chan struct{} // closed once the port responds or the start failed
@@ -121,13 +122,17 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.SysProcAttr = sysProcAttr()
-	// stdout/stderr go to the null device until logs land in milestone 3.
+	logs := &ringLog{}
+	cmd.Stdout, cmd.Stderr = logs, logs
+	// Grandchildren may keep the output pipe open after the child exits.
+	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start failed: %w", err)
 	}
 
 	p := &proc{
 		cmd:    cmd,
+		logs:   logs,
 		status: StatusStarting,
 		ready:  make(chan struct{}),
 		exited: make(chan struct{}),
@@ -149,6 +154,11 @@ func (m *Manager) wait(name string, p *proc) {
 			p.status, p.err = StatusError, "exited before the port responded"
 		} else {
 			p.status = StatusStopped
+		}
+		if p.status == StatusError {
+			if tail := p.logs.Tail(8); len(tail) > 0 {
+				p.err += "\n" + strings.Join(tail, "\n")
+			}
 		}
 	}
 	close(p.exited)

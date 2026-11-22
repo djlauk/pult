@@ -265,5 +265,7 @@
   .tile .error {
     font-size: 12px;
     word-break: break-word;
+    white-space: pre-wrap;
+    font-family: ui-monospace, monospace;
   }
 </style>
