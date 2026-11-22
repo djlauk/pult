@@ -143,6 +143,7 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error(), "groups": []groupDTO{}})
 		return
 	}
+	s.procs.TryAdopt(cfg) // tools.json may now match a remembered process
 
 	var groups []groupDTO
 	index := map[string]int{}

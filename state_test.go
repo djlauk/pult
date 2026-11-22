@@ -81,41 +81,69 @@ func TestAdoptAndStop(t *testing.T) {
 	}
 }
 
-// Entries that do not match tools.json or the live process are not adopted,
-// and their processes are left alone.
-func TestAdoptRejectsMismatches(t *testing.T) {
+// A dead process or a reused pid drops the entry; the process is not ours.
+func TestCheckProcess(t *testing.T) {
 	self := os.Getpid()
 	selfStart, alive := processStartTime(self)
 	if !alive || selfStart == 0 {
 		t.Fatal("processStartTime does not see the test process")
 	}
-	cfg := &Config{Tools: []Tool{{Name: "a", URL: "http://127.0.0.1:47397"}}}
-	cases := map[string]stateEntry{
-		"unknown tool": {Name: "gone", PID: self, StartTime: selfStart, Port: "47397"},
-		"port changed": {Name: "a", PID: self, StartTime: selfStart, Port: "1234"},
-		"pid reused":   {Name: "a", PID: self, StartTime: selfStart + 1, Port: "47397"},
-		"dead process": {Name: "a", PID: 999999, StartTime: 1, Port: "47397"},
+	if r := checkProcess(stateEntry{PID: self, StartTime: selfStart}); r != "" {
+		t.Errorf("live process rejected: %s", r)
 	}
-	for name, e := range cases {
-		if reason := checkEntry(cfg, e); reason == "" {
-			t.Errorf("%s: entry was accepted", name)
-		}
+	if r := checkProcess(stateEntry{PID: self, StartTime: selfStart + 1}); r == "" {
+		t.Error("reused pid accepted")
 	}
-	good := stateEntry{Name: "a", PID: self, StartTime: selfStart, Port: "47397"}
-	if reason := checkEntry(cfg, good); reason != "" {
-		t.Errorf("matching entry rejected: %s", reason)
+	if r := checkProcess(stateEntry{PID: 999999, StartTime: 1}); r == "" {
+		t.Error("dead process accepted")
 	}
 
-	// Through Adopt: a rejected entry is dropped from the state file.
 	statePath := filepath.Join(t.TempDir(), "pult-state.json")
-	data, _ := json.Marshal([]stateEntry{cases["pid reused"]})
+	data, _ := json.Marshal([]stateEntry{{Name: "a", PID: self, StartTime: selfStart + 1, Port: "47397"}})
 	os.WriteFile(statePath, data, 0o600)
 	m := NewManager(statePath)
-	m.Adopt(cfg)
+	m.Adopt(&Config{Tools: []Tool{{Name: "a", URL: "http://127.0.0.1:47397"}}})
 	if st, _ := m.State("a"); st != StatusStopped {
-		t.Errorf("mismatched entry adopted, status %s", st)
+		t.Errorf("reused pid adopted, status %s", st)
 	}
 	if entries := readState(t, statePath); len(entries) != 0 {
 		t.Errorf("state = %+v, want empty", entries)
 	}
 }
+
+// The reported scenario: start pult with a changed port (not adopted), then
+// revert the port. The entry must survive and be adopted on the next page
+// load, without restarting pult.
+func TestAdoptAfterConfigReverted(t *testing.T) {
+	self := os.Getpid()
+	selfStart, _ := processStartTime(self)
+	entry := stateEntry{Name: "a", PID: self, StartTime: selfStart, Port: "47397"}
+	statePath := filepath.Join(t.TempDir(), "pult-state.json")
+	data, _ := json.Marshal([]stateEntry{entry})
+	os.WriteFile(statePath, data, 0o600)
+
+	changed := &Config{Tools: []Tool{{Name: "a", URL: "http://127.0.0.1:1234"}}}
+	removed := &Config{}
+	reverted := &Config{Tools: []Tool{{Name: "a", URL: "http://127.0.0.1:47397"}}}
+
+	m := NewManager(statePath)
+	m.Adopt(changed)
+	m.TryAdopt(removed)
+	if st, _ := m.State("a"); st != StatusStopped {
+		t.Fatalf("adopted despite mismatch, status %s", st)
+	}
+	if entries := readState(t, statePath); len(entries) != 1 {
+		t.Fatalf("state = %+v, want the entry kept", entries)
+	}
+
+	m.TryAdopt(reverted)
+	if !m.Adopted("a") {
+		t.Fatal("not adopted after tools.json was reverted")
+	}
+	// Don't let the test Stop its own process: mark it gone instead.
+	m.mu.Lock()
+	m.procs["a"].startTime = -1
+	m.mu.Unlock()
+	waitStatus(t, m, "a", StatusError)
+}
+

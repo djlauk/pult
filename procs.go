@@ -53,10 +53,15 @@ type Manager struct {
 	mu        sync.Mutex
 	procs     map[string]*proc
 	statePath string // where running tools are recorded; "" disables it
+
+	// pending are remembered processes from an earlier run that do not
+	// match tools.json yet; pendingWhy holds the last logged reason per pid.
+	pending    []stateEntry
+	pendingWhy map[int]string
 }
 
 func NewManager(statePath string) *Manager {
-	return &Manager{procs: map[string]*proc{}, statePath: statePath}
+	return &Manager{procs: map[string]*proc{}, statePath: statePath, pendingWhy: map[int]string{}}
 }
 
 // Adopted reports whether a tool was taken over from an earlier pult run.
