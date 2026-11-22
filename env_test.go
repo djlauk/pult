@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -96,7 +95,7 @@ func TestStartNodeTool(t *testing.T) {
 	if err := m.EnsureRunning(cfg, tool); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { killForTest(m, tool.Name) })
+	t.Cleanup(func() { m.Stop(tool.Name) })
 
 	if st, _ := m.State(tool.Name); st != StatusRunning {
 		t.Fatalf("status = %s", st)
@@ -127,20 +126,4 @@ func TestStartNodeTool(t *testing.T) {
 	if st, _ := m.State(other.Name); st != StatusStopped {
 		t.Errorf("busy refusal should not mark tool as error, got %s", st)
 	}
-}
-
-// killForTest kills the process tree until the stop feature exists (M3).
-func killForTest(m *Manager, name string) {
-	m.mu.Lock()
-	p := m.procs[name]
-	m.mu.Unlock()
-	if p == nil || p.cmd == nil {
-		return
-	}
-	if runtime.GOOS == "windows" {
-		exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(p.cmd.Process.Pid)).Run()
-	} else {
-		p.cmd.Process.Kill()
-	}
-	<-p.exited
 }

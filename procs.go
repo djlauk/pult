@@ -23,17 +23,26 @@ const (
 	StatusError    Status = "error"
 )
 
-const startTimeout = 30 * time.Second
+const (
+	startTimeout = 30 * time.Second
+	stopTimeout  = 10 * time.Second
+)
 
 var errPortBusy = errors.New("in use")
 
 type proc struct {
-	cmd    *exec.Cmd
-	logs   *ringLog
-	status Status
-	err    string
-	ready  chan struct{} // closed once the port responds or the start failed
-	exited chan struct{} // closed when the process exits
+	cmd      *exec.Cmd
+	port     string
+	logs     *ringLog
+	status   Status
+	err      string
+	stopping bool
+	ready    chan struct{} // closed once the port responds or the start failed
+	exited   chan struct{} // closed when the process exits
+}
+
+func (p *proc) active() bool {
+	return p.status == StatusStarting || p.status == StatusRunning
 }
 
 // Manager tracks the child processes started by the launcher.
@@ -57,12 +66,53 @@ func (m *Manager) State(name string) (Status, string) {
 	return p.status, p.err
 }
 
+// Logs returns the captured output of a tool's last run.
+func (m *Manager) Logs(name string) []string {
+	m.mu.Lock()
+	p, ok := m.procs[name]
+	m.mu.Unlock()
+	if !ok || p.logs == nil {
+		return []string{}
+	}
+	return p.logs.Tail(logLines)
+}
+
+// PortOwner returns the name of an active pult tool (other than exclude)
+// that uses port, or "".
+func (m *Manager) PortOwner(port, exclude string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.portOwner(port, exclude)
+}
+
+func (m *Manager) portOwner(port, exclude string) string {
+	for name, p := range m.procs {
+		if name != exclude && p.active() && p.port == port {
+			return name
+		}
+	}
+	return ""
+}
+
+// Running returns the names of all active tools.
+func (m *Manager) Running() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var names []string
+	for name, p := range m.procs {
+		if p.active() {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // EnsureRunning starts the tool if it is not running and waits until its
 // port responds. It returns nil once the tool is reachable.
 func (m *Manager) EnsureRunning(cfg *Config, t Tool) error {
 	m.mu.Lock()
 	p, ok := m.procs[t.Name]
-	if !ok || p.status == StatusStopped || p.status == StatusError {
+	if !ok || !p.active() {
 		var err error
 		p, err = m.start(cfg, t)
 		if errors.Is(err, errPortBusy) {
@@ -81,10 +131,51 @@ func (m *Manager) EnsureRunning(cfg *Config, t Tool) error {
 	<-p.ready
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if p.status != StatusRunning {
-		return errors.New(p.err)
+	switch {
+	case p.status == StatusRunning:
+		return nil
+	case p.stopping:
+		return errors.New("stopped")
 	}
-	return nil
+	return errors.New(p.err)
+}
+
+// Stop terminates the tool's whole process tree and waits for it to exit.
+func (m *Manager) Stop(name string) error {
+	m.mu.Lock()
+	p, ok := m.procs[name]
+	if !ok || !p.active() {
+		m.mu.Unlock()
+		return nil
+	}
+	p.stopping = true
+	pid := p.cmd.Process.Pid
+	m.mu.Unlock()
+
+	if err := stopTree(pid, p.exited); err != nil {
+		return err
+	}
+	select {
+	case <-p.exited:
+		return nil
+	case <-time.After(stopTimeout):
+		return fmt.Errorf("process %d did not exit", pid)
+	}
+}
+
+// StopAll stops all active tools in parallel.
+func (m *Manager) StopAll() {
+	var wg sync.WaitGroup
+	for _, name := range m.Running() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := m.Stop(name); err != nil {
+				fmt.Fprintf(os.Stderr, "stop %s: %v\n", name, err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 // start launches the process. Caller holds m.mu.
@@ -109,9 +200,12 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 	if err != nil {
 		return nil, err
 	}
+	port, _ := toolPort(t.URL)
+	if owner := m.portOwner(port, t.Name); owner != "" {
+		return nil, fmt.Errorf("port %s %w by: %s", port, errPortBusy, owner)
+	}
 	if portOpen(addr) {
-		port, _ := toolPort(t.URL)
-		return nil, fmt.Errorf("port %s: %w", port, errPortBusy)
+		return nil, fmt.Errorf("port %s %w by another process", port, errPortBusy)
 	}
 	env, err := buildEnv(t, dir)
 	if err != nil {
@@ -132,33 +226,35 @@ func (m *Manager) start(cfg *Config, t Tool) (*proc, error) {
 
 	p := &proc{
 		cmd:    cmd,
+		port:   port,
 		logs:   logs,
 		status: StatusStarting,
 		ready:  make(chan struct{}),
 		exited: make(chan struct{}),
 	}
-	go m.wait(t.Name, p)
+	go m.wait(p)
 	go m.waitReady(p, addr)
 	return p, nil
 }
 
 // wait reaps the process and records how it ended.
-func (m *Manager) wait(name string, p *proc) {
+func (m *Manager) wait(p *proc) {
 	err := p.cmd.Wait()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if p.status == StatusStarting || p.status == StatusRunning {
-		if err != nil {
-			p.status, p.err = StatusError, "exited: "+err.Error()
-		} else if p.status == StatusStarting {
-			p.status, p.err = StatusError, "exited before the port responded"
-		} else {
-			p.status = StatusStopped
-		}
-		if p.status == StatusError {
-			if tail := p.logs.Tail(8); len(tail) > 0 {
-				p.err += "\n" + strings.Join(tail, "\n")
-			}
+	switch {
+	case p.stopping:
+		p.status, p.err = StatusStopped, ""
+	case err != nil:
+		p.status, p.err = StatusError, "exited: "+err.Error()
+	case p.status == StatusStarting:
+		p.status, p.err = StatusError, "exited before the port responded"
+	default:
+		p.status = StatusStopped
+	}
+	if p.status == StatusError {
+		if tail := p.logs.Tail(8); len(tail) > 0 {
+			p.err += "\n" + strings.Join(tail, "\n")
 		}
 	}
 	close(p.exited)

@@ -3,9 +3,26 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 )
+
+// stopTree kills the process and all its descendants (npm → cmd → node).
+func stopTree(pid int, exited <-chan struct{}) error {
+	out, err := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid)).CombinedOutput()
+	if err != nil {
+		select {
+		case <-exited:
+			return nil // already gone
+		default:
+		}
+		return fmt.Errorf("taskkill: %v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 const createNoWindow = 0x08000000
 
