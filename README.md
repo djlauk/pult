@@ -28,6 +28,19 @@ For a build with a console window (shows the log live): `go build -o bin/pult-co
 
 Linux: `GOOS=linux go build -o bin/pult ./cmd/pult`. The tray icon needs a StatusNotifier host (on GNOME, the AppIndicator extension).
 
+## Install
+
+pult is a single binary with no installer. On Windows, copy it to the per-user programs folder (no admin rights needed):
+
+```powershell
+New-Item -ItemType Directory -Force "$env:LocalAppData\Programs\pult"
+Copy-Item bin\pult.exe "$env:LocalAppData\Programs\pult\"
+```
+
+Run it from there, not from `bin/`: Windows locks a running exe, so with pult started from `bin/` every rebuild fails until you quit it. To update, quit pult from the tray, copy the new build, and start it again.
+
+On Linux, copy it to `~/.local/bin/`.
+
 ## Run
 
 ```
@@ -75,12 +88,10 @@ Starting pult a second time opens the running instance's UI.
 **Windows:** press Win+R, enter `shell:startup`, and create a shortcut there with the target:
 
 ```
-C:\path\to\pult.exe -no-browser
+%LocalAppData%\Programs\pult\pult.exe -no-browser
 ```
 
 `-no-browser` keeps a browser tab from opening at every login; the tray icon is enough. To turn it off, delete the shortcut or disable it under Task Manager → Startup apps.
-
-Windows locks a running exe, so a rebuild into the same path fails while pult runs. Quit pult from the tray first, or point the shortcut at a copy outside `bin/`, e.g. `%LocalAppData%\Programs\pult\pult.exe`.
 
 **Linux:** create `~/.config/autostart/pult.desktop`:
 
@@ -88,7 +99,7 @@ Windows locks a running exe, so a rebuild into the same path fails while pult ru
 [Desktop Entry]
 Type=Application
 Name=pult
-Exec=/path/to/pult -no-browser
+Exec=/home/you/.local/bin/pult -no-browser
 X-GNOME-Autostart-enabled=true
 ```
 
