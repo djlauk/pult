@@ -1,0 +1,77 @@
+# Builds and publishes a GitHub release when a version tag is pushed.
+# The tag is made by scripts/release.ps1, which has already committed
+# CHANGELOG.md and the version; this workflow only builds and never
+# commits. Release notes are the tag's section of CHANGELOG.md.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write # create the release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Check tag matches brand.Version
+        run: |
+          v=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/brand/icon.go)
+          if [ "v$v" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match brand.Version $v. Use scripts/release.ps1."
+            exit 1
+          fi
+
+      - name: Build frontend
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
+
+      - name: Test
+        run: go test ./...
+
+      # CGO is off for both targets: the Linux binary is fully static, and
+      # the Windows one links cmd/pult/rsrc_windows_amd64.syso (icon,
+      # version info) automatically.
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOARCH: amd64
+        run: |
+          mkdir -p dist
+          GOOS=windows go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/pult.exe ./cmd/pult
+          GOOS=linux go build -trimpath -ldflags "-s -w" -o dist/pult-linux-amd64 ./cmd/pult
+          file dist/*
+          (cd dist && sha256sum * > SHA256SUMS)
+
+      - name: Extract release notes
+        run: |
+          awk -v v="${TAG#v}" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && index($0, "## [") == 1 { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::No section for $TAG in CHANGELOG.md."
+            exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" dist/* --verify-tag --title "pult $TAG" --notes-file notes.md

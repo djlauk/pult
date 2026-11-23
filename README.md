@@ -28,9 +28,20 @@ For a build with a console window (shows the log live): `go build -o bin/pult-co
 
 Linux: `GOOS=linux go build -o bin/pult ./cmd/pult`. The tray icon needs a StatusNotifier host (on GNOME, the AppIndicator extension).
 
+## Release
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`, `docs:`, …); [CHANGELOG.md](CHANGELOG.md) is generated from them with [git-cliff](https://git-cliff.org) (`winget install git-cliff`).
+
+```powershell
+pwsh scripts/release.ps1 1.2.0     # on a clean main: version, .syso, CHANGELOG.md, commit, tag
+git push origin main v1.2.0        # the tag starts .github/workflows/release.yml
+```
+
+The script writes the changelog section for the new version before the tag exists and commits it together with the version bump, then tags that commit. The workflow only builds: it checks that the tag matches `brand.Version`, runs the tests, builds `pult.exe` and a static `pult-linux-amd64`, and publishes a GitHub release with that version's changelog section as release notes.
+
 ## Install
 
-pult is a single binary with no installer. On Windows, copy it to the per-user programs folder (no admin rights needed):
+pult is a single binary with no installer. Download it from the [releases](https://github.com/djlauk/pult/releases) or build it. On Windows, copy it to the per-user programs folder (no admin rights needed):
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:LocalAppData\Programs\pult"
