@@ -207,11 +207,12 @@ func (s *server) handleSignals() {
 	}
 }
 
-// handleTiles re-reads tools.json and returns all tiles grouped.
+// handleTiles re-reads tools.json and returns all tiles grouped, plus
+// pult's version for the header.
 func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	cfg, err := launcher.LoadConfig(s.configPath)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error(), "groups": []groupDTO{}})
+		writeJSON(w, http.StatusOK, map[string]any{"version": brand.Version, "error": err.Error(), "groups": []groupDTO{}})
 		return
 	}
 	s.procs.TryAdopt(cfg) // tools.json may now match a remembered process
@@ -250,7 +251,7 @@ func (s *server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	if groups == nil {
 		groups = []groupDTO{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+	writeJSON(w, http.StatusOK, map[string]any{"version": brand.Version, "groups": groups})
 }
 
 // handleOpen starts a tool if needed, waits for its port, then opens its URL.

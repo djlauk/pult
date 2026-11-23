@@ -3,6 +3,7 @@
 
   let groups = $state([]);
   let configError = $state('');
+  let version = $state('');
   let query = $state('');
   let logs = $state({}); // tool name -> lines, for tiles with logs open
   let searchEl;
@@ -24,6 +25,7 @@
             t.port_busy = '';
           }
       groups = data.groups;
+      version = data.version ?? '';
       configError = data.error ?? '';
     } catch (e) {
       configError = 'Launcher not reachable: ' + e.message;
@@ -157,6 +159,7 @@
 <main>
   <header>
     <h1>pult</h1>
+    {#if version}<span class="version">v{version}</span>{/if}
     <input
       bind:this={searchEl}
       bind:value={query}
@@ -268,6 +271,11 @@
   h1 {
     margin: 0;
     font-size: 22px;
+  }
+  .version {
+    margin-left: -8px; /* closer to the title than the header gap */
+    color: var(--muted);
+    font-size: 13px;
   }
   input {
     flex: 1;
