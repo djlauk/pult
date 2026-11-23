@@ -23,7 +23,7 @@ Local launcher for my tools. Read SPEC.md first; it is the source of truth.
 - `internal/launcher/`: config, environment, processes, logs, state file.
 - `web/`: Svelte frontend; `web/embed.go` embeds `web/dist`.
 - `bin/` (gitignored): build output only.
-- `scripts/release.ps1`, `cliff.toml`, `.github/workflows/release.yml`: release tooling.
+- `scripts/release.ps1`, `scripts/release.sh`, `cliff.toml`, `.github/workflows/release.yml`: release tooling.
 - Data files live outside the repo: `tools.json` in `%AppData%\pult\` (`~/.config/pult/`), `pult-state.json` and `pult.log` in `%LocalAppData%\pult\` (`~/.cache/pult/`). Never commit data files.
 
 ## Commands
@@ -36,4 +36,4 @@ Local launcher for my tools. Read SPEC.md first; it is the source of truth.
 - Frontend dev: run `bin/pult.exe -no-browser`, then `npm --prefix web run dev` (Vite proxies `/api` to :7300)
 - Cross-compile Linux: `$env:GOOS='linux'; go build -o bin/pult-linux ./cmd/pult; Remove-Item Env:GOOS`
 - Tests: `go test ./...`
-- Release (user only, on a clean `main`): `pwsh scripts/release.ps1 X.Y.Z`, then `git push origin main vX.Y.Z`. The tag triggers `.github/workflows/release.yml`, which builds and publishes but never commits.
+- Release (user only, on a clean `main`): `pwsh scripts/release.ps1 X.Y.Z` (or `scripts/release.sh X.Y.Z`; keep both in sync), then `git push origin main vX.Y.Z`. The tag triggers `.github/workflows/release.yml`, which builds and publishes but never commits.

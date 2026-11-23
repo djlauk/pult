@@ -37,6 +37,8 @@ pwsh scripts/release.ps1 1.2.0     # on a clean main: version, .syso, CHANGELOG.
 git push origin main v1.2.0        # the tag starts .github/workflows/release.yml
 ```
 
+On Linux (or in Git Bash), `scripts/release.sh 1.2.0` does the same.
+
 The script writes the changelog section for the new version before the tag exists and commits it together with the version bump, then tags that commit. The workflow only builds: it checks that the tag matches `brand.Version`, runs the tests, builds `pult.exe` and a static `pult-linux-amd64`, and publishes a GitHub release with that version's changelog section as release notes.
 
 ## Install

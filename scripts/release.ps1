@@ -2,6 +2,7 @@
 # resources and CHANGELOG.md, commits all of it as "chore(release): vX.Y.Z"
 # and tags that commit. It does not push; pushing the tag starts the
 # GitHub release workflow (.github/workflows/release.yml).
+# Same steps as scripts/release.sh; keep the two in sync.
 #
 # Usage: pwsh scripts/release.ps1 1.2.0
 # Needs: git, go, npm, git-cliff (winget install git-cliff).
